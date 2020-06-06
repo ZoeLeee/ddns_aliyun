@@ -45,7 +45,7 @@ async function main() {
 			break;
 	}
 
-	if (ip) return;
+	if (!ip) return;
 	console.log(calcDate.toLocaleString(), '当前外网 ip:', ip);
 	const records = await getDomainInfo();
 	if (!records.length) {
