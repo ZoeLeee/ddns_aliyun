@@ -28,24 +28,22 @@ const CommonParam={
 	SignatureVersion: '1.0',
 	SignatureNonce: uuidv1()
 }
+const getCurrentTime=()=>{
+	return new Date().toLocaleString();
+}
 
 Exec();
 
-// 每十五分钟更新一次
+// 每天6点执行
 schedule.scheduleJob('0 0 6 * * * ', function () {
 	Exec();
 });
 
-async function Exec() {
-	const now = new Date();
-	const localTime = now.getTime();
-	const localOffset = now.getTimezoneOffset() * 60000;
-	const utc = localTime + localOffset;
-	const offset = 8;
-	const calctime = utc + (3600000 * offset);
-	const calcDate = new Date(calctime);
 
-	console.log(calcDate.toLocaleString(), '正在更新DNS记录 ...');
+
+async function Exec() {
+
+	console.log(getCurrentTime(), '正在更新DNS记录 ...');
 	let ip;
 	for (let url of IpApis) {
 		ip = await getExternalIP(url);
@@ -55,7 +53,7 @@ async function Exec() {
 
 	if (!ip) return;
 
-	console.log(calcDate.toLocaleString(), '当前外网 ip:', ip);
+	console.log(getCurrentTime(), '当前外网 ip:', ip);
 	let records;
 	if (Domain)
 		records = await getDomainInfo();
@@ -68,9 +66,9 @@ async function Exec() {
 
 	if (records.length === 0) {
 		if (Domain) {
-			console.log(calcDate.toLocaleString(), '记录不存在，新增中 ...');
+			console.log(getCurrentTime(), '记录不存在，新增中 ...');
 			await addRecord(ip);
-			return console.log(calcDate.toLocaleString(), '成功, 当前 dns 指向: ', ip);
+			return console.log(getCurrentTime(), '成功, 当前 dns 指向: ', ip);
 		}
 		else return;
 	}
@@ -82,11 +80,11 @@ async function Exec() {
 		const recordID = record.RecordId;
 		const recordValue = record.Value;
 		if (recordValue === ip) {
-			console.log(calcDate.toLocaleString(), `主机${record.RR}记录一致, 无修改`);
+			console.log(getCurrentTime(), `主机${record.RR}记录一致, 无修改`);
 		}
 		else {
 			await updateRecord(recordID, ip)
-			console.log(calcDate.toLocaleString(), `成功,主机${record.RR} dns 指向: ${ip}`);
+			console.log(getCurrentTime(), `成功,主机${record.RR} dns 指向: ${ip}`);
 		}
 	}
 }
