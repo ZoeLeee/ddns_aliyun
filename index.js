@@ -2,15 +2,13 @@
  * 借助阿里云 DNS 服务实现 DDNS（动态域名解析）
  * https://help.aliyun.com/document_detail/29739.html
  */
-const DNS = require('dns');
-
 const crypto = require('crypto');
 const axios = require('axios');
 const uuidv1 = require('uuid/v1');
 
 const schedule = require('node-schedule');
 
-const { AccessKey, AccessKeySecret, Domain } = require('./config.json');
+const { AccessKey, AccessKeySecret, Domain, DomainName, Type, RRs } = require('./config.json');
 
 const HttpInstance = axios.create({
 	baseURL: 'https://alidns.aliyuncs.com/',
@@ -18,17 +16,27 @@ const HttpInstance = axios.create({
 		'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36'
 	}
 });
-const IpApis= ["http://api.ipify.org/","http://ifconfig.me/ip"];
-const Headers=["www","api"];
+const IpApis = ["http://api.ipify.org/", "http://ifconfig.me/ip"];
 
-main();
+// 阿里云公共请求参数
+const CommonParam={
+	Format: 'JSON',
+	Version: '2015-01-09',
+	AccessKeyId: AccessKey,
+	SignatureMethod: 'HMAC-SHA1',
+	Timestamp: (new Date()).toISOString(),
+	SignatureVersion: '1.0',
+	SignatureNonce: uuidv1()
+}
+
+Exec();
 
 // 每十五分钟更新一次
 schedule.scheduleJob('0 0 6 * * * ', function () {
-	main();
+	Exec();
 });
 
-async function main() {
+async function Exec() {
 	const now = new Date();
 	const localTime = now.getTime();
 	const localOffset = now.getTimezoneOffset() * 60000;
@@ -38,39 +46,63 @@ async function main() {
 	const calcDate = new Date(calctime);
 
 	console.log(calcDate.toLocaleString(), '正在更新DNS记录 ...');
-	let ip ;
-	for(let url of IpApis){
+	let ip;
+	for (let url of IpApis) {
 		ip = await getExternalIP(url);
-		if(ip)
+		if (ip)
 			break;
 	}
 
 	if (!ip) return;
-	console.log(calcDate.toLocaleString(), '当前外网 ip:', ip);
-	const records = await getDomainInfo();
-	if (!records.length) {
-		console.log(calcDate.toLocaleString(), '记录不存在，新增中 ...');
-		await addRecord(ip);
-		return console.log(calcDate.toLocaleString(), '成功, 当前 dns 指向: ', ip);
-	}
-	const recordID = records[0].RecordId;
-	const recordValue = records[0].Value;
-	if (recordValue === ip) return console.log(calcDate.toLocaleString(), '记录一致, 无修改');
 
-	await updateRecord(recordID, ip)
-	console.log(calcDate.toLocaleString(), '成功, 当前 dns 指向: ', ip);
+	console.log(calcDate.toLocaleString(), '当前外网 ip:', ip);
+	let records;
+	if (Domain)
+		records = await getDomainInfo();
+	else if (DomainName)
+		records = await getDomainInfos();
+	else {
+		console.log("请输入域名");
+		return;
+	}
+
+	if (records.length === 0) {
+		if (Domain) {
+			console.log(calcDate.toLocaleString(), '记录不存在，新增中 ...');
+			await addRecord(ip);
+			return console.log(calcDate.toLocaleString(), '成功, 当前 dns 指向: ', ip);
+		}
+		else return;
+	}
+
+	for (let record of records) {
+		if (record.Status.toUpperCase() !== "ENABLE") continue;
+		if(RRs.length>0&&!RRs.includes(record.RR)) continue;
+
+		const recordID = record.RecordId;
+		const recordValue = record.Value;
+		if (recordValue === ip) {
+			console.log(calcDate.toLocaleString(), `主机${record.RR}记录一致, 无修改`);
+		}
+		else {
+			await updateRecord(recordID, ip)
+			console.log(calcDate.toLocaleString(), `成功,主机${record.RR} dns 指向: ${ip}`);
+		}
+	}
 }
 
 // 新增记录
 function addRecord(ip) {
 	return new Promise((resolve, reject) => {
-		const requestParams = sortJSON(Object.assign({
+
+		const requestParams = sortJSON({
 			Action: 'AddDomainRecord',
 			DomainName: Domain.match(/\.(.*)/)[1],
 			RR: Domain.match(/(.*?)\./)[1],
 			Type: 'A',
-			Value: ip
-		}, commonParams()));
+			Value: ip,
+			...CommonParam
+		});
 		const Signature = sign(requestParams);
 		HttpInstance.get('/', {
 			params: Object.assign({
@@ -89,13 +121,14 @@ function addRecord(ip) {
 // 更新记录
 function updateRecord(id, ip) {
 	return new Promise((resolve, reject) => {
-		const requestParams = sortJSON(Object.assign({
+		const requestParams = sortJSON({
 			Action: 'UpdateDomainRecord',
 			RecordId: id,
 			RR: Domain.match(/(.*?)\./)[1],
 			Type: 'A',
-			Value: ip
-		}, commonParams()));
+			Value: ip,
+			...CommonParam
+		});
 		const Signature = sign(requestParams);
 		HttpInstance.get('/', {
 			params: Object.assign({
@@ -129,11 +162,12 @@ async function getExternalIP(url) {
 // 获取当前解析记录
 function getDomainInfo() {
 	return new Promise((resolve, reject) => {
-		const requestParams = sortJSON(Object.assign({
+		const requestParams = sortJSON({
 			Action: 'DescribeSubDomainRecords',
 			SubDomain: Domain,
-			PageSize: 100
-		}, commonParams()));
+			PageSize: 100,
+			...CommonParam
+		});
 		const Signature = sign(requestParams);
 		HttpInstance.get('/', {
 			params: Object.assign({
@@ -149,18 +183,33 @@ function getDomainInfo() {
 	});
 }
 
-// json 字典顺序排序
-function sortJSON(object) {
-	const result = {};
-	const keys = Object.keys(object);
-	keys.sort();
-	keys.forEach(item => {
-		result[item] = object[item];
-	})
-	return result;
+
+// 获取当前解析记录
+function getDomainInfos() {
+	return new Promise((resolve, reject) => {
+		const requestParams = sortJSON({
+			Action: 'DescribeDomainRecords',
+			DomainName: DomainName,
+			PageSize: 100,
+			Type,
+			...CommonParam
+		});
+		const Signature = sign(requestParams);
+		HttpInstance.get('/', {
+			params: Object.assign({
+				Signature
+			}, requestParams)
+		})
+			.then(res => {
+				resolve(res.data.DomainRecords.Record);
+			})
+			.catch(e => {
+				reject(e);
+			})
+	});
 }
 
-// 阿里云签名
+// 阿里云签名https://help.aliyun.com/document_detail/29747.html?spm=a2c4g.11186623.6.628.67942b73m91J5r
 function sign(object) {
 	const hmac = crypto.createHmac('sha1', AccessKeySecret + '&');
 	const temp = [];
@@ -171,16 +220,13 @@ function sign(object) {
 	const result = hmac.update(sourceStr).digest('base64');
 	return result;
 }
-
-// 阿里云公共请求参数
-function commonParams() {
-	return {
-		Format: 'JSON',
-		Version: '2015-01-09',
-		AccessKeyId: AccessKey,
-		SignatureMethod: 'HMAC-SHA1',
-		Timestamp: (new Date()).toISOString(),
-		SignatureVersion: '1.0',
-		SignatureNonce: uuidv1()
-	}
+// json 字典顺序排序
+function sortJSON(object) {
+	const result = {};
+	const keys = Object.keys(object);
+	keys.sort();
+	keys.forEach(item => {
+		result[item] = object[item];
+	})
+	return result;
 }
