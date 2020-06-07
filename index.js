@@ -77,7 +77,7 @@ async function Exec() {
 
 	for (let record of records) {
 		if (record.Status.toUpperCase() !== "ENABLE") continue;
-		if(RRs.length>0&&!RRs.includes(record.RR)) continue;
+		if(RRs&&RRs.length>0&&!RRs.includes(record.RR)) continue;
 
 		const recordID = record.RecordId;
 		const recordValue = record.Value;
