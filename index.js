@@ -24,7 +24,7 @@ const CommonParam={
 	Version: '2015-01-09',
 	AccessKeyId: AccessKey,
 	SignatureMethod: 'HMAC-SHA1',
-	Timestamp: (new Date()).toISOString(),
+	Timestamp: new Date().toISOString(),
 	SignatureVersion: '1.0',
 	SignatureNonce: uuidv1()
 }
@@ -35,14 +35,12 @@ const getCurrentTime=()=>{
 Exec();
 
 // 每天6点执行
-schedule.scheduleJob('0 0 6 * * * ', function () {
+schedule.scheduleJob('0 0 10 * * * ', function () {
 	Exec();
 });
 
 
-
 async function Exec() {
-
 	console.log(getCurrentTime(), '正在更新DNS记录 ...');
 	let ip;
 	for (let url of IpApis) {
@@ -77,13 +75,13 @@ async function Exec() {
 		if (record.Status.toUpperCase() !== "ENABLE") continue;
 		if(RRs&&RRs.length>0&&!RRs.includes(record.RR)) continue;
 
-		const recordID = record.RecordId;
 		const recordValue = record.Value;
+		console.log(record.RR);
 		if (recordValue === ip) {
 			console.log(getCurrentTime(), `主机${record.RR}记录一致, 无修改`);
 		}
 		else {
-			await updateRecord(recordID, ip)
+			await updateRecord(record, ip)
 			console.log(getCurrentTime(), `成功,主机${record.RR} dns 指向: ${ip}`);
 		}
 	}
@@ -117,12 +115,12 @@ function addRecord(ip) {
 }
 
 // 更新记录
-function updateRecord(id, ip) {
+async function  updateRecord(record, ip) {
 	return new Promise((resolve, reject) => {
 		const requestParams = sortJSON({
 			Action: 'UpdateDomainRecord',
-			RecordId: id,
-			RR: Domain.match(/(.*?)\./)[1],
+			RecordId: record.RecordId,
+			RR: record.RR,
 			Type: 'A',
 			Value: ip,
 			...CommonParam
