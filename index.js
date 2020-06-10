@@ -97,7 +97,8 @@ function addRecord(ip) {
 			RR: Domain.match(/(.*?)\./)[1],
 			Type: 'A',
 			Value: ip,
-			...CommonParam
+			...CommonParam,
+			Timestamp: new Date().toISOString()
 		});
 		const Signature = sign(requestParams);
 		HttpInstance.get('/', {
@@ -123,7 +124,8 @@ async function  updateRecord(record, ip) {
 			RR: record.RR,
 			Type: 'A',
 			Value: ip,
-			...CommonParam
+			...CommonParam,
+			Timestamp: new Date().toISOString()
 		});
 		const Signature = sign(requestParams);
 		HttpInstance.get('/', {
@@ -162,7 +164,8 @@ function getDomainInfo() {
 			Action: 'DescribeSubDomainRecords',
 			SubDomain: Domain,
 			PageSize: 100,
-			...CommonParam
+			...CommonParam,
+			Timestamp: new Date().toISOString()
 		});
 		const Signature = sign(requestParams);
 		HttpInstance.get('/', {
@@ -188,7 +191,8 @@ function getDomainInfos() {
 			DomainName: DomainName,
 			PageSize: 100,
 			Type,
-			...CommonParam
+			...CommonParam,
+			Timestamp: new Date().toISOString()
 		});
 		const Signature = sign(requestParams);
 		HttpInstance.get('/', {
