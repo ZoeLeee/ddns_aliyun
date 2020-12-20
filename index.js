@@ -8,7 +8,7 @@ const uuidv1 = require('uuid/v1');
 
 const schedule = require('node-schedule');
 
-const { AccessKey, AccessKeySecret, Domain, DomainName, Type, RRs } = require('./config.json');
+const { AccessKey, AccessKeySecret, Domain, DomainName, Type, RRs, sendUrl, secret } = require('./config.json');
 
 const HttpInstance = axios.create({
 	baseURL: 'https://alidns.aliyuncs.com/',
@@ -16,10 +16,29 @@ const HttpInstance = axios.create({
 		'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36'
 	}
 });
+
+async function sendMsg(msg) {
+	if (!sendUrl || !secret) return;
+	//http://idayer.com/node-js-hmac-hash-sha256/
+	const timestamp = Date.now();
+	const str = timestamp + "\n" + secret;
+	const hmac = crypto.createHmac('sha256', secret);
+	hmac.update(str);
+	let sign = encodeURIComponent(hmac.digest('base64'));
+
+	let url = `${sendUrl}&timestamp=${timestamp}&sign=${sign}`;
+	axios.post(url, {
+		"msgtype": "text",
+		"text": {
+			"content": msg
+		}
+	});
+}
+
 const IpApis = ["http://api.ipify.org/", "http://ifconfig.me/ip"];
 
 // 阿里云公共请求参数
-const CommonParam={
+const CommonParam = {
 	Format: 'JSON',
 	Version: '2015-01-09',
 	AccessKeyId: AccessKey,
@@ -27,10 +46,10 @@ const CommonParam={
 	Timestamp: new Date().toISOString(),
 	SignatureVersion: '1.0',
 	SignatureNonce: uuidv1()
-}
-const getCurrentTime=()=>{
+};
+const getCurrentTime = () => {
 	return new Date().toLocaleString();
-}
+};
 
 Exec();
 
@@ -66,6 +85,7 @@ async function Exec() {
 		if (Domain) {
 			console.log(getCurrentTime(), '记录不存在，新增中 ...');
 			await addRecord(ip);
+			await sendMsg('成功, 当前 dns 指向: ', ip);
 			return console.log(getCurrentTime(), '成功, 当前 dns 指向: ', ip);
 		}
 		else return;
@@ -73,7 +93,7 @@ async function Exec() {
 
 	for (let record of records) {
 		if (record.Status.toUpperCase() !== "ENABLE") continue;
-		if(RRs&&RRs.length>0&&!RRs.includes(record.RR)) continue;
+		if (RRs && RRs.length > 0 && !RRs.includes(record.RR)) continue;
 
 		const recordValue = record.Value;
 		console.log(record.RR);
@@ -81,7 +101,8 @@ async function Exec() {
 			console.log(getCurrentTime(), `主机${record.RR}记录一致, 无修改`);
 		}
 		else {
-			await updateRecord(record, ip)
+			await updateRecord(record, ip);
+			await sendMsg(`成功,主机${record.RR} dns 指向: ${ip}`);
 			console.log(getCurrentTime(), `成功,主机${record.RR} dns 指向: ${ip}`);
 		}
 	}
@@ -111,12 +132,12 @@ function addRecord(ip) {
 			})
 			.catch(e => {
 				reject(e);
-			})
+			});
 	});
 }
 
 // 更新记录
-async function  updateRecord(record, ip) {
+async function updateRecord(record, ip) {
 	return new Promise((resolve, reject) => {
 		const requestParams = sortJSON({
 			Action: 'UpdateDomainRecord',
@@ -138,7 +159,7 @@ async function  updateRecord(record, ip) {
 			})
 			.catch(e => {
 				reject(e);
-			})
+			});
 	});
 }
 // 获取本机外网 ip 地址
@@ -152,7 +173,7 @@ async function getExternalIP(url) {
 		});
 		return res.data.replace('\n', '');
 	} catch (err) {
-		console.err("ip获取失败")
+		console.err("ip获取失败");
 		return null;
 	}
 }
@@ -178,7 +199,7 @@ function getDomainInfo() {
 			})
 			.catch(e => {
 				reject(e);
-			})
+			});
 	});
 }
 
@@ -205,7 +226,7 @@ function getDomainInfos() {
 			})
 			.catch(e => {
 				reject(e);
-			})
+			});
 	});
 }
 
@@ -215,7 +236,7 @@ function sign(object) {
 	const temp = [];
 	Object.keys(object).forEach(item => {
 		temp.push(`${encodeURIComponent(item)}=${encodeURIComponent(object[item])}`);
-	})
+	});
 	const sourceStr = 'GET&%2F&' + encodeURIComponent(temp.join('&'));
 	const result = hmac.update(sourceStr).digest('base64');
 	return result;
@@ -227,6 +248,6 @@ function sortJSON(object) {
 	keys.sort();
 	keys.forEach(item => {
 		result[item] = object[item];
-	})
+	});
 	return result;
 }

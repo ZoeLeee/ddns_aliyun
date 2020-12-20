@@ -5,4 +5,6 @@
   "DomainName":"", // example.com,与Domain 填入一个即可，
   "RRs":[],  //不填默认修改DomainName的全部记录，否则只修改符合条件的 如["www","api"]
   "Type":"A",
+   "sendUrl": "" //钉钉机器人发送报告的地址,
+   secret:"" //腾讯云 AccessKeySecret
 }
