@@ -68,7 +68,10 @@ async function Exec() {
 			break;
 	}
 
-	if (!ip) return;
+	if (!ip) {
+		sendMsg("本机ip获取失败");
+		return;
+	}
 
 	console.log(getCurrentTime(), '当前外网 ip:', ip);
 	let records;
@@ -98,6 +101,7 @@ async function Exec() {
 		const recordValue = record.Value;
 		console.log(record.RR);
 		if (recordValue === ip) {
+			sendMsg(`主机${record.RR}记录一致, 无修改`);
 			console.log(getCurrentTime(), `主机${record.RR}记录一致, 无修改`);
 		}
 		else {
@@ -174,6 +178,7 @@ async function getExternalIP(url) {
 		return res.data.replace('\n', '');
 	} catch (err) {
 		console.err("ip获取失败");
+		sendMsg(err.message || err);
 		return null;
 	}
 }
