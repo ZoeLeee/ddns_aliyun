@@ -58,57 +58,68 @@ schedule.scheduleJob('0 0 10 * * * ', function () {
 	Exec();
 });
 
+const sleep = (t) => {
+	return new Promise(res => {
+		setTimeout(res, t);
+	});
+};
 
 async function Exec() {
-	console.log(getCurrentTime(), '正在更新DNS记录 ...');
-	let ip;
-	for (let url of IpApis) {
-		ip = await getExternalIP(url);
-		if (ip)
-			break;
-	}
-
-	if (!ip) {
-		sendMsg("本机ip获取失败");
-		return;
-	}
-
-	console.log(getCurrentTime(), '当前外网 ip:', ip);
-	let records;
-	if (Domain)
-		records = await getDomainInfo();
-	else if (DomainName)
-		records = await getDomainInfos();
-	else {
-		console.log("请输入域名");
-		return;
-	}
-
-	if (records.length === 0) {
-		if (Domain) {
-			console.log(getCurrentTime(), '记录不存在，新增中 ...');
-			await addRecord(ip);
-			await sendMsg('成功, 当前 dns 指向: ', ip);
-			return console.log(getCurrentTime(), '成功, 当前 dns 指向: ', ip);
+	try {
+		console.log(getCurrentTime(), '正在更新DNS记录 ...');
+		let ip;
+		for (let url of IpApis) {
+			ip = await getExternalIP(url);
+			if (ip)
+				break;
 		}
-		else return;
-	}
 
-	for (let record of records) {
-		if (record.Status.toUpperCase() !== "ENABLE") continue;
-		if (RRs && RRs.length > 0 && !RRs.includes(record.RR)) continue;
-
-		const recordValue = record.Value;
-		console.log(record.RR);
-		if (recordValue === ip) {
-			sendMsg(`主机${record.RR}记录一致, 无修改`);
-			console.log(getCurrentTime(), `主机${record.RR}记录一致, 无修改`);
+		if (!ip) {
+			sendMsg("本机ip获取失败");
+			return;
 		}
+
+		console.log(getCurrentTime(), '当前外网 ip:', ip);
+		let records;
+		if (Domain)
+			records = await getDomainInfo();
+		else if (DomainName)
+			records = await getDomainInfos();
 		else {
-			await updateRecord(record, ip);
-			await sendMsg(`成功,主机${record.RR} dns 指向: ${ip}`);
-			console.log(getCurrentTime(), `成功,主机${record.RR} dns 指向: ${ip}`);
+			console.log("请输入域名");
+			return;
 		}
+
+		if (records.length === 0) {
+			if (Domain) {
+				console.log(getCurrentTime(), '记录不存在，新增中 ...');
+				await addRecord(ip);
+				await sendMsg('成功, 当前 dns 指向: ', ip);
+				return console.log(getCurrentTime(), '成功, 当前 dns 指向: ', ip);
+			}
+			else return;
+		}
+
+		for (let record of records) {
+			if (record.Status.toUpperCase() !== "ENABLE") continue;
+			if (RRs && RRs.length > 0 && !RRs.includes(record.RR)) continue;
+
+			const recordValue = record.Value;
+			console.log(record.RR);
+			if (recordValue === ip) {
+				sendMsg(`主机${record.RR}记录一致, 无修改`);
+				console.log(getCurrentTime(), `主机${record.RR}记录一致, 无修改`);
+			}
+			else {
+				await updateRecord(record, ip);
+				await sendMsg(`成功,主机${record.RR} dns 指向: ${ip}`);
+				console.log(getCurrentTime(), `成功,主机${record.RR} dns 指向: ${ip}`);
+			}
+			sleep(1000);
+		}
+	} catch (err) {
+		console.log(err);
+		await sendMsg(err);
 	}
 }
 
