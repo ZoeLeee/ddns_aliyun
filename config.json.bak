@@ -7,4 +7,6 @@
   "Type":"A",
    "sendUrl": "" //钉钉机器人发送报告的地址,
    secret:"" //腾讯云 AccessKeySecret
+   TXSecretId:"",
+   TXSecretKey:"",
 }
